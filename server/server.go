@@ -43,6 +43,8 @@ type Server struct {
 	addPeer   chan *Peer
 	msgCh     chan *Message
 	delPeer   chan *Peer // kanal za brisanje Peerova(konekcija)
+
+	gameState *GameState
 }
 
 func NewServer(cfg ServerConfig) *Server {
@@ -52,6 +54,7 @@ func NewServer(cfg ServerConfig) *Server {
 		addPeer:      make(chan *Peer),
 		msgCh:        make(chan *Message),
 		delPeer:      make(chan *Peer),
+		gameState:    NewGameState(),
 	}
 	tr := NewTCPTransport(s.ListenAddr)
 	tr.AddPeer = s.addPeer
@@ -63,7 +66,7 @@ func NewServer(cfg ServerConfig) *Server {
 func (s *Server) Start() {
 	go s.loop()
 
-	logrus.WithFields(logrus.Fields{"port": s.ListenAddr, "type": "Texas hold em"}).Info("Started new server")
+	logrus.WithFields(logrus.Fields{"port": s.ListenAddr, "type": "Texas hold em", "gameStatus": s.gameState.gameStatus}).Info("Started new server")
 	s.transport.ListenAndAccept()
 
 }
@@ -92,13 +95,21 @@ func (s *Server) loop() {
 			delete(s.peers, addr)
 
 		case peer := <-s.addPeer:
-			s.SendHandshake(peer)
 			if err := s.handshake(peer); err != nil {
 				logrus.Errorf("handshake with incoming peer failed: %s", err)
+				peer.conn.Close()
 				continue
 			} // prvo provjerimo handshake da vidimo da li se peer može spojiti
-
 			go peer.ReadLoop(s.msgCh)
+
+			if !peer.outbound { // ako peer nije outbound, tj. onda je inbound što znači da se neki peer(konekcija) spaja na nas, a ako je outbound peer
+				// to onda znači da mi uspostavljamo vezu prema nekom drugom čvoru
+				if err := s.SendHandshake(peer); err != nil {
+					logrus.Errorf("failed to send handshake with peer: %s", err)
+					peer.conn.Close()
+					continue
+				}
+			}
 
 			logrus.WithFields(logrus.Fields{
 				"addr": peer.conn.RemoteAddr(),
@@ -121,10 +132,11 @@ func (s *Server) Connect(addr string) error {
 	}
 
 	peer := &Peer{
-		conn: conn,
+		conn:     conn,
+		outbound: true,
 	}
 	s.addPeer <- peer
-	return peer.Send([]byte(s.Version))
+	return s.SendHandshake(peer)
 
 }
 

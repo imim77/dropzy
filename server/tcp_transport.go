@@ -2,7 +2,6 @@ package server
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"net"
 
@@ -16,7 +15,8 @@ type Message struct {
 
 // Peer is a connection
 type Peer struct {
-	conn net.Conn
+	conn     net.Conn
+	outbound bool
 }
 
 func (p *Peer) Send(b []byte) error {
@@ -70,11 +70,11 @@ func (t *TCPTransport) ListenAndAccept() error {
 			continue
 		}
 		peer := &Peer{ // ovdje kreiramo novi peer
-			conn: conn,
+			conn:     conn,
+			outbound: false,
 		}
 		t.AddPeer <- peer
 
 	}
 
-	return fmt.Errorf("TCP transport stopped reason: ?")
 }
