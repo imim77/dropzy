@@ -1,41 +1,34 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"net/http"
-	"os"
-	"os/signal"
 	"time"
+
+	"github.com/imim77/dropzy/server"
 )
 
-func run(ctx context.Context) error {
-	ctx, cancel := signal.NotifyContext(ctx, os.Interrupt)
-	defer cancel()
-	cfg := &Config{Port: ":42069"}
-	logger := NewLogger(os.Stdout)
-	srv := NewServer(cfg, logger)
-	httpServer := &http.Server{
-		Addr:    cfg.Port,
-		Handler: srv,
+func main() {
+	cfg := server.ServerConfig{
+		Version:    "GGPOKER v1.2 Alpha",
+		ListenAddr: ":4000",
 	}
+	s := server.NewServer(cfg)
 
 	go func() {
-		logger.InfoMess("Server starting on: " + httpServer.Addr)
-		if err := httpServer.ListenAndServe(); err != nil {
-			logger.Error("http server failed", err)
-		}
+		s.Start()
 	}()
-	<-ctx.Done()
-	shutdownCtx, cancel := context.WithTimeout(context.Background(), time.Second*2)
-	defer cancel()
-	return httpServer.Shutdown(shutdownCtx)
-}
-
-func main() {
-	ctx := context.Background()
-	if err := run(ctx); err != nil {
-		fmt.Fprintf(os.Stderr, "%s\n", err)
-		os.Exit(1)
+	time.Sleep(time.Second * 1)
+	time.Sleep(time.Second)
+	remoteCfg := server.ServerConfig{
+		Version:    "GGPOKER v1.2 Alpha",
+		ListenAddr: ":2000",
 	}
+	remoteSrv := server.NewServer(remoteCfg)
+	go func() {
+		remoteSrv.Start()
+	}()
+	if err := remoteSrv.Connect(":4000"); err != nil {
+		fmt.Println(err)
+	}
+
 }
