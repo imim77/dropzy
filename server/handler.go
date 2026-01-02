@@ -12,6 +12,7 @@ type Handler interface {
 type DefaultHandler struct{}
 
 func (h *DefaultHandler) HandleMessage(msg *Message) error {
+
 	b, err := io.ReadAll(msg.Payload)
 	if err != nil {
 		return err
